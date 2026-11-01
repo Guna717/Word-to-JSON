@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Math Quiz JSON Converter</title>
+    <style>
+      :root {
+        --primary: #10b981;
+        --bg-color: #f8fafc;
+        --panel-bg: #ffffff;
+        --border: #e2e8f0;
+        --text: #1e293b;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text);
+        margin: 0;
+        padding: 20px;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .container {
+        display: flex;
+        gap: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .panel {
+        background-color: var(--panel-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 20px;
+        flex: 1;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+
+      textarea {
+        width: 100%;
+        height: 400px;
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        font-family: "Consolas", monospace;
+        resize: vertical;
+        box-sizing: border-box;
+        margin-bottom: 15px;
+        white-space: pre;
+      }
+
+      button {
+        background-color: var(--primary);
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        width: 100%;
+        font-size: 16px;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background-color: #059669;
+      }
+
+      .control-group {
+        display: flex;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .control-group:last-child {
+        border-bottom: none;
+      }
+
+      .control-group input[type="checkbox"] {
+        margin-right: 10px;
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+      }
+
+      .control-group label {
+        cursor: pointer;
+        flex: 1;
+      }
+
+      #controls-container {
+        max-height: 350px;
+        overflow-y: auto;
+        margin-bottom: 15px;
+        background: #f1f5f9;
+        padding: 10px;
+        border-radius: 6px;
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Math Quiz to JSON Converter</h1>
+      <p>
+        Parse your multi-lingual questions and export them to a structured JSON
+        file.
+      </p>
+    </div>
+
+    <div class="container">
+      <!-- Input Section -->
+      <div class="panel">
+        <h3>1. Paste Raw Text</h3>
+        <textarea
+          id="raw-text"
+          placeholder="Paste your question text here..."
+        ></textarea>
+        <button onclick="parseText()">Parse Data</button>
+      </div>
+
+      <!-- Customization Section -->
+      <div class="panel">
+        <h3>2. Select Fields & Export</h3>
+
+        <div id="export-options" class="hidden">
+          <div id="controls-container"></div>
+          <button id="export-btn" onclick="exportToJson()">
+            Download JSON File
+          </button>
+        </div>
+
+        <div id="placeholder-msg">
+          <p style="color: #64748b">
+            Click 'Parse Data' first to generate available fields.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let parsedQuestions = [];
+      let uniqueFields = new Set();
+
+      function parseText() {
+        const rawText = document.getElementById("raw-text").value;
+        const lines = rawText.split("\n");
+
+        parsedQuestions = [];
+        uniqueFields.clear();
+
+        let currentQuestion = null;
+        let currentBlock = null;
+
+        const fieldRegex = /^\s*(.+?)\s*\((English|Tamil|Hindi)\)\s*:\s*(.*)$/i;
+
+        for (let i = 0; i < lines.length; i++) {
+          let originalLine = lines[i];
+          let trimmedLine = originalLine.trim();
+
+          if (!trimmedLine) {
+            if (currentBlock) currentBlock.content += "\n";
+            continue;
+          }
+
+          if (/^Question\s+\d+/i.test(trimmedLine)) {
+            if (currentQuestion && currentBlock) {
+              currentQuestion.blocks.push(currentBlock);
+            }
+            currentQuestion = { title: trimmedLine, blocks: [] };
+            parsedQuestions.push(currentQuestion);
+            currentBlock = null;
+            continue;
+          }
+
+          if (/^(English|Tamil|Hindi)$/i.test(trimmedLine)) {
+            continue;
+          }
+
+          const match = originalLine.match(fieldRegex);
+          if (match) {
+            if (currentQuestion && currentBlock) {
+              currentQuestion.blocks.push(currentBlock);
+            }
+
+            const baseName = match[1].trim();
+            uniqueFields.add(baseName);
+
+            currentBlock = {
+              baseName: baseName,
+              lang: match[2].trim(),
+              content: match[3],
+            };
+          } else if (currentBlock) {
+            currentBlock.content += "\n" + originalLine;
+          }
+        }
+
+        if (currentQuestion && currentBlock) {
+          currentQuestion.blocks.push(currentBlock);
+        }
+
+        renderControls();
+      }
+
+      function renderControls() {
+        const container = document.getElementById("controls-container");
+        const exportOptions = document.getElementById("export-options");
+        const placeholderMsg = document.getElementById("placeholder-msg");
+
+        container.innerHTML = "";
+
+        if (uniqueFields.size === 0) {
+          placeholderMsg.innerHTML =
+            '<p style="color: red;">No valid fields found. Please check your format.</p>';
+          placeholderMsg.classList.remove("hidden");
+          exportOptions.classList.add("hidden");
+          return;
+        }
+
+        placeholderMsg.classList.add("hidden");
+        exportOptions.classList.remove("hidden");
+
+        uniqueFields.forEach((field) => {
+          const group = document.createElement("div");
+          group.className = "control-group";
+
+          group.innerHTML = `
+                    <input type="checkbox" id="chk_${field}" value="${field}" checked>
+                    <label for="chk_${field}">${field}</label>
+                `;
+          container.appendChild(group);
+        });
+      }
+
+      // Cleans up 〖180〗^∘ into a standard 180° string for JSON
+      function cleanMathText(text) {
+        return text.replace(/〖([^〗]+)〗\^[^\s\/\=\+\-\(\)〖〗,.;:]+/g, "$1°");
+      }
+
+      function exportToJson() {
+        // Get selected fields from checkboxes
+        const includedFields = new Set();
+        uniqueFields.forEach((field) => {
+          if (document.getElementById(`chk_${field}`).checked) {
+            includedFields.add(field);
+          }
+        });
+
+        const finalData = [];
+
+        // Build structured JSON object
+        parsedQuestions.forEach((q) => {
+          const questionObj = {
+            questionId: q.title,
+            languages: {},
+          };
+
+          q.blocks.forEach((block) => {
+            if (includedFields.has(block.baseName)) {
+              // Initialize language object if it doesn't exist
+              if (!questionObj.languages[block.lang]) {
+                questionObj.languages[block.lang] = {};
+              }
+
+              // Clean text and remove trailing newlines
+              let cleanText = cleanMathText(block.content).trim();
+
+              questionObj.languages[block.lang][block.baseName] = cleanText;
+            }
+          });
+
+          // Only add to array if there is data
+          if (Object.keys(questionObj.languages).length > 0) {
+            finalData.push(questionObj);
+          }
+        });
+
+        // Convert to formatted JSON string
+        const jsonString = JSON.stringify(finalData, null, 4);
+
+        // Trigger Download
+        const blob = new Blob([jsonString], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "quiz_data.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    </script>
+  </body>
+</html>
